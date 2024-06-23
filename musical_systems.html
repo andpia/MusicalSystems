@@ -15,23 +15,29 @@
             margin: 0;
             background-color: #f0f0f0;
         }
-        #frequencySlider {
+        #frequencySlider, #noteSelector {
             width: 300px;
             margin: 20px 0;
         }
-        #frequencyValue {
+        #frequencyValue, #systemSelector {
             font-size: 18px;
             margin-bottom: 20px;
         }
         button {
             font-size: 16px;
             padding: 10px 20px;
+            margin: 10px;
         }
     </style>
 </head>
 <body>
     <h1>Generatore di Toni</h1>
-    <input type="range" id="frequencySlider" min="20" max="20000" value="440" step="1">
+    <select id="systemSelector">
+        <option value="temperato">Sistema Ben Temperato</option>
+        <option value="naturale">Sistema Naturale</option>
+    </select>
+    <select id="noteSelector"></select>
+    <input type="range" id="frequencySlider" min="20" max="20000" value="440" step="0.01">
     <div id="frequencyValue">Frequenza: 440 Hz</div>
     <button id="playButton">Riproduci Tono</button>
 
@@ -39,16 +45,58 @@
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         let oscillator = null;
 
+        const systemSelector = document.getElementById('systemSelector');
+        const noteSelector = document.getElementById('noteSelector');
         const slider = document.getElementById('frequencySlider');
         const frequencyDisplay = document.getElementById('frequencyValue');
         const playButton = document.getElementById('playButton');
 
-        slider.addEventListener('input', updateFrequency);
-        playButton.addEventListener('click', toggleTone);
+        const temperatedNotes = ['C', 'C#/Db', 'D', 'D#/Eb', 'E', 'F', 'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B'];
+        const naturalNotes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+        const baseFrequency = 440; // A4
+
+        function populateNoteSelector() {
+            noteSelector.innerHTML = '';
+            const notes = systemSelector.value === 'temperato' ? temperatedNotes : naturalNotes;
+            for (let octave = 0; octave < 9; octave++) {
+                for (let note of notes) {
+                    const option = document.createElement('option');
+                    option.value = `${note}${octave}`;
+                    option.textContent = `${note}${octave}`;
+                    noteSelector.appendChild(option);
+                }
+            }
+            noteSelector.value = 'A4';
+        }
+
+        function calculateFrequency(note, octave, system) {
+            if (system === 'temperato') {
+                const noteIndex = temperatedNotes.indexOf(note);
+                const semitones = noteIndex - temperatedNotes.indexOf('A') + (octave - 4) * 12;
+                return baseFrequency * Math.pow(2, semitones / 12);
+            } else {
+                // Sistema naturale basato su rapporti di numeri interi
+                const ratios = {
+                    'C': 1,
+                    'D': 9/8,
+                    'E': 5/4,
+                    'F': 4/3,
+                    'G': 3/2,
+                    'A': 5/3,
+                    'B': 15/8
+                };
+                return baseFrequency * ratios[note] * Math.pow(2, octave - 4);
+            }
+        }
 
         function updateFrequency() {
-            const frequency = slider.value;
-            frequencyDisplay.textContent = `Frequenza: ${frequency} Hz`;
+            const [note, octave] = noteSelector.value.split(/(\d+)/);
+            const system = systemSelector.value;
+            const frequency = calculateFrequency(note, parseInt(octave), system);
+            
+            slider.value = frequency;
+            frequencyDisplay.textContent = `Frequenza: ${frequency.toFixed(2)} Hz`;
+            
             if (oscillator) {
                 oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
             }
@@ -62,12 +110,28 @@
             } else {
                 oscillator = audioContext.createOscillator();
                 oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(slider.value, audioContext.currentTime);
+                oscillator.frequency.setValueAtTime(parseFloat(slider.value), audioContext.currentTime);
                 oscillator.connect(audioContext.destination);
                 oscillator.start();
                 playButton.textContent = 'Ferma Tono';
             }
         }
+
+        systemSelector.addEventListener('change', () => {
+            populateNoteSelector();
+            updateFrequency();
+        });
+        noteSelector.addEventListener('change', updateFrequency);
+        slider.addEventListener('input', () => {
+            frequencyDisplay.textContent = `Frequenza: ${parseFloat(slider.value).toFixed(2)} Hz`;
+            if (oscillator) {
+                oscillator.frequency.setValueAtTime(parseFloat(slider.value), audioContext.currentTime);
+            }
+        });
+        playButton.addEventListener('click', toggleTone);
+
+        populateNoteSelector();
+        updateFrequency();
     </script>
 </body>
 </html>
