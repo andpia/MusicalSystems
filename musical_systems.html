@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generatore di Toni Musicali</title>
+    <title>Confronto Sistemi Musicali</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -17,18 +17,22 @@
             color: #fff;
         }
         .container {
+            display: flex;
+            justify-content: space-between;
+            width: 90%;
+            max-width: 1000px;
             background: rgba(255, 255, 255, 0.1);
             padding: 2rem;
             border-radius: 15px;
             box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
             backdrop-filter: blur(4px);
             border: 1px solid rgba(255, 255, 255, 0.18);
-            width: 80%;
-            max-width: 500px;
         }
-        h1 {
+        .column {
+            width: 48%;
+        }
+        h1, h2 {
             text-align: center;
-            margin-bottom: 1.5rem;
             color: #ffffff;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
@@ -71,7 +75,7 @@
             background: #4CAF50;
             cursor: pointer;
         }
-        #frequencyValue {
+        .frequencyValue {
             text-align: center;
             font-size: 1.2rem;
             margin: 15px 0;
@@ -87,27 +91,150 @@
             font-size: 1rem;
             cursor: pointer;
             transition: background-color 0.3s;
+            margin-top: 10px;
         }
         button:hover {
             background-color: #45a049;
         }
+        #activeSystemSelector {
+            width: 100%;
+            margin: 20px 0;
+            padding: 10px;
+            font-size: 1.1rem;
+        }
     </style>
 </head>
 <body>
+    <h1>Confronto Sistemi Musicali</h1>
+    <select id="activeSystemSelector">
+        <option value="temperato">Sistema Attivo: Ben Temperato</option>
+        <option value="naturale">Sistema Attivo: Naturale</option>
+    </select>
     <div class="container">
-        <h1>Generatore di Toni Musicali</h1>
-        <select id="systemSelector">
-            <option value="temperato">Sistema Ben Temperato</option>
-            <option value="naturale">Sistema Naturale</option>
-        </select>
-        <select id="noteSelector"></select>
-        <input type="range" id="frequencySlider" min="20" max="20000" value="440" step="0.01">
-        <div id="frequencyValue">Frequenza: 440 Hz</div>
-        <button id="playButton">Riproduci Tono</button>
+        <div class="column">
+            <h2>Sistema Ben Temperato</h2>
+            <select id="temperatedNoteSelector"></select>
+            <input type="range" id="temperatedFrequencySlider" min="20" max="20000" value="440" step="0.01">
+            <div id="temperatedFrequencyValue" class="frequencyValue">Frequenza: 440 Hz</div>
+        </div>
+        <div class="column">
+            <h2>Sistema Naturale</h2>
+            <select id="naturalNoteSelector"></select>
+            <input type="range" id="naturalFrequencySlider" min="20" max="20000" value="440" step="0.01">
+            <div id="naturalFrequencyValue" class="frequencyValue">Frequenza: 440 Hz</div>
+        </div>
     </div>
+    <button id="playButton">Riproduci Tono</button>
 
     <script>
-        // ... (il codice JavaScript rimane lo stesso della versione precedente) ...
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let oscillator = null;
+
+        const activeSystemSelector = document.getElementById('activeSystemSelector');
+        const temperatedNoteSelector = document.getElementById('temperatedNoteSelector');
+        const naturalNoteSelector = document.getElementById('naturalNoteSelector');
+        const temperatedFrequencySlider = document.getElementById('temperatedFrequencySlider');
+        const naturalFrequencySlider = document.getElementById('naturalFrequencySlider');
+        const temperatedFrequencyDisplay = document.getElementById('temperatedFrequencyValue');
+        const naturalFrequencyDisplay = document.getElementById('naturalFrequencyValue');
+        const playButton = document.getElementById('playButton');
+
+        const temperatedNotes = ['C', 'C#/Db', 'D', 'D#/Eb', 'E', 'F', 'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B'];
+        const naturalNotes = ['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B'];
+        const baseFrequency = 440; // A4
+
+        function populateNoteSelector(selector, notes) {
+            selector.innerHTML = '';
+            for (let octave = 0; octave < 9; octave++) {
+                for (let note of notes) {
+                    const option = document.createElement('option');
+                    option.value = `${note}${octave}`;
+                    option.textContent = `${note}${octave}`;
+                    selector.appendChild(option);
+                }
+            }
+            selector.value = 'A4';
+        }
+
+        function calculateFrequency(note, octave, system) {
+            if (system === 'temperato') {
+                const noteIndex = temperatedNotes.indexOf(note.split('/')[0]);
+                const semitones = noteIndex - temperatedNotes.indexOf('A') + (octave - 4) * 12;
+                return baseFrequency * Math.pow(2, semitones / 12);
+            } else {
+                const ratios = {
+                    'C': 1, 'C#': 25/24, 'Db': 16/15, 'D': 9/8, 'D#': 75/64, 'Eb': 6/5,
+                    'E': 5/4, 'F': 4/3, 'F#': 45/32, 'Gb': 25/18, 'G': 3/2, 'G#': 25/16,
+                    'Ab': 8/5, 'A': 5/3, 'A#': 125/72, 'Bb': 9/5, 'B': 15/8
+                };
+                return baseFrequency * ratios[note] * Math.pow(2, octave - 4);
+            }
+        }
+
+        function updateFrequency(system) {
+            const selector = system === 'temperato' ? temperatedNoteSelector : naturalNoteSelector;
+            const slider = system === 'temperato' ? temperatedFrequencySlider : naturalFrequencySlider;
+            const display = system === 'temperato' ? temperatedFrequencyDisplay : naturalFrequencyDisplay;
+
+            const [note, octave] = selector.value.split(/(\d+)/);
+            const frequency = calculateFrequency(note, parseInt(octave), system);
+            
+            slider.value = frequency;
+            display.textContent = `Frequenza: ${frequency.toFixed(2)} Hz`;
+            
+            if (oscillator && activeSystemSelector.value === system) {
+                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            }
+        }
+
+        function toggleTone() {
+            if (oscillator) {
+                oscillator.stop();
+                oscillator = null;
+                playButton.textContent = 'Riproduci Tono';
+            } else {
+                const activeSystem = activeSystemSelector.value;
+                const frequency = parseFloat(activeSystem === 'temperato' ? temperatedFrequencySlider.value : naturalFrequencySlider.value);
+
+                oscillator = audioContext.createOscillator();
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+                oscillator.connect(audioContext.destination);
+                oscillator.start();
+                playButton.textContent = 'Ferma Tono';
+            }
+        }
+
+        activeSystemSelector.addEventListener('change', () => {
+            if (oscillator) {
+                toggleTone(); // Stop the current tone
+                toggleTone(); // Start a new tone with the selected system
+            }
+        });
+
+        temperatedNoteSelector.addEventListener('change', () => updateFrequency('temperato'));
+        naturalNoteSelector.addEventListener('change', () => updateFrequency('naturale'));
+
+        temperatedFrequencySlider.addEventListener('input', () => {
+            temperatedFrequencyDisplay.textContent = `Frequenza: ${parseFloat(temperatedFrequencySlider.value).toFixed(2)} Hz`;
+            if (oscillator && activeSystemSelector.value === 'temperato') {
+                oscillator.frequency.setValueAtTime(parseFloat(temperatedFrequencySlider.value), audioContext.currentTime);
+            }
+        });
+
+        naturalFrequencySlider.addEventListener('input', () => {
+            naturalFrequencyDisplay.textContent = `Frequenza: ${parseFloat(naturalFrequencySlider.value).toFixed(2)} Hz`;
+            if (oscillator && activeSystemSelector.value === 'naturale') {
+                oscillator.frequency.setValueAtTime(parseFloat(naturalFrequencySlider.value), audioContext.currentTime);
+            }
+        });
+
+        playButton.addEventListener('click', toggleTone);
+
+        populateNoteSelector(temperatedNoteSelector, temperatedNotes);
+        populateNoteSelector(naturalNoteSelector, naturalNotes);
+        updateFrequency('temperato');
+        updateFrequency('naturale');
     </script>
 </body>
 </html>
