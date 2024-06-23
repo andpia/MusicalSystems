@@ -124,6 +124,14 @@
             flex-grow: 1;
             margin: 0 10px;
         }
+        .playback-controls {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        .playback-controls button {
+            width: 48%;
+        }
     </style>
 </head>
 <body>
@@ -154,7 +162,10 @@
             <div id="naturalFrequencyValue" class="frequencyValue">Frequenza: 440 Hz</div>
         </div>
     </div>
-    <button id="playButton">Riproduci Tono</button>
+    <div class="playback-controls">
+        <button id="playButton">Riproduci Tono</button>
+        <button id="toggleModeButton">Modalità: Continua</button>
+    </div>
 
     <script>
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -168,10 +179,14 @@
         const temperatedFrequencyDisplay = document.getElementById('temperatedFrequencyValue');
         const naturalFrequencyDisplay = document.getElementById('naturalFrequencyValue');
         const playButton = document.getElementById('playButton');
+        const toggleModeButton = document.getElementById('toggleModeButton');
 
         const temperatedNotes = ['C', 'C#/Db', 'D', 'D#/Eb', 'E', 'F', 'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B'];
         const naturalNotes = ['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B'];
         const baseFrequency = 440; // A4
+
+        let isAlternatingMode = false;
+        let alternatingInterval;
 
         function populateNoteSelector(selector, notes) {
             selector.innerHTML = '';
@@ -212,26 +227,55 @@
             slider.value = frequency;
             display.textContent = `Frequenza: ${frequency.toFixed(2)} Hz`;
             
-            if (oscillator && activeSystemSelector.value === system) {
+            if (oscillator) {
                 oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            }
+        }
+
+        function togglePlaybackMode() {
+            isAlternatingMode = !isAlternatingMode;
+            toggleModeButton.textContent = isAlternatingMode ? 'Modalità: Alternata' : 'Modalità: Continua';
+            
+            if (oscillator) {
+                stopTone();
+                playTone();
+            }
+        }
+
+        function playTone() {
+            const activeSystem = activeSystemSelector.value;
+            const frequency = parseFloat(activeSystem === 'temperato' ? temperatedFrequencySlider.value : naturalFrequencySlider.value);
+
+            oscillator = audioContext.createOscillator();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            oscillator.connect(audioContext.destination);
+            oscillator.start();
+            playButton.textContent = 'Ferma Tono';
+
+            if (isAlternatingMode) {
+                alternatingInterval = setInterval(() => {
+                    const currentSystem = activeSystemSelector.value;
+                    activeSystemSelector.value = currentSystem === 'temperato' ? 'naturale' : 'temperato';
+                    updateFrequency(activeSystemSelector.value);
+                }, 2000);
+            }
+        }
+
+        function stopTone() {
+            if (oscillator) {
+                oscillator.stop();
+                oscillator = null;
+                playButton.textContent = 'Riproduci Tono';
+                clearInterval(alternatingInterval);
             }
         }
 
         function toggleTone() {
             if (oscillator) {
-                oscillator.stop();
-                oscillator = null;
-                playButton.textContent = 'Riproduci Tono';
+                stopTone();
             } else {
-                const activeSystem = activeSystemSelector.value;
-                const frequency = parseFloat(activeSystem === 'temperato' ? temperatedFrequencySlider.value : naturalFrequencySlider.value);
-
-                oscillator = audioContext.createOscillator();
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-                oscillator.connect(audioContext.destination);
-                oscillator.start();
-                playButton.textContent = 'Ferma Tono';
+                playTone();
             }
         }
 
@@ -244,8 +288,8 @@
 
         activeSystemSelector.addEventListener('change', () => {
             if (oscillator) {
-                toggleTone(); // Stop the current tone
-                toggleTone(); // Start a new tone with the selected system
+                stopTone();
+                playTone();
             }
         });
 
@@ -267,6 +311,7 @@
         });
 
         playButton.addEventListener('click', toggleTone);
+        toggleModeButton.addEventListener('click', togglePlaybackMode);
 
         document.getElementById('temperatedPrevNote').addEventListener('click', () => changeNote(temperatedNoteSelector, -1));
         document.getElementById('temperatedNextNote').addEventListener('click', () => changeNote(temperatedNoteSelector, 1));
