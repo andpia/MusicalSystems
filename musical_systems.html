@@ -132,6 +132,35 @@
         .playback-controls button {
             width: 48%;
         }
+
+        #piano-keyboard {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            width: 100%;
+        }           
+        .piano-key {
+            width: 40px;
+            height: 120px;
+            border: 1px solid #000;
+            background-color: #fff;
+            margin: 0 2px;
+            cursor: pointer;
+        }
+        .piano-key.black {
+            background-color: #000;
+            height: 80px;
+            width: 30px;
+            margin-left: -15px;
+            margin-right: -15px;
+            z-index: 1;
+        }
+        .piano-key:active, .piano-key.active {
+            background-color: #ddd;
+        }
+        .piano-key.black:active, .piano-key.black.active {
+            background-color: #333;
+        }        
     </style>
 </head>
 <body>
@@ -166,6 +195,8 @@
         <button id="playButton">Riproduci Tono</button>
         <button id="toggleModeButton">Modalità: Continua</button>
     </div>
+
+    <div id="piano-keyboard"></div>
 
     <script>
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -202,17 +233,47 @@
         }
 
         function calculateFrequency(note, octave, system) {
+            const A4 = 440; // Frequenza di riferimento per A4
+            
             if (system === 'temperato') {
-                const noteIndex = temperatedNotes.indexOf(note.split('/')[0]);
-                const semitones = noteIndex - temperatedNotes.indexOf('A') + (octave - 4) * 12;
-                return baseFrequency * Math.pow(2, semitones / 12);
-            } else {
+                const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+                let noteIndex = notes.indexOf(note.split('/')[0].replace('b', '#'));
+                let octaveOffset = octave - 4; // A4 è nell'ottava 4
+                
+                // Calcola i semitoni di distanza da A4
+                let semitones = noteIndex - notes.indexOf('A') + octaveOffset * 12;
+                
+                // Calcola la frequenza usando la formula del temperamento equabile
+                return A4 * Math.pow(2, semitones / 12);
+            } else { // Sistema naturale
                 const ratios = {
-                    'C': 1, 'C#': 25/24, 'Db': 16/15, 'D': 9/8, 'D#': 75/64, 'Eb': 6/5,
-                    'E': 5/4, 'F': 4/3, 'F#': 45/32, 'Gb': 25/18, 'G': 3/2, 'G#': 25/16,
-                    'Ab': 8/5, 'A': 5/3, 'A#': 125/72, 'Bb': 9/5, 'B': 15/8
+                    'C': 1/1,
+                    'C#': 25/24,
+                    'Db': 16/15,
+                    'D': 9/8,
+                    'D#': 75/64,
+                    'Eb': 6/5,
+                    'E': 5/4,
+                    'F': 4/3,
+                    'F#': 45/32,
+                    'Gb': 25/18,
+                    'G': 3/2,
+                    'G#': 25/16,
+                    'Ab': 8/5,
+                    'A': 5/4,
+                    'A#': 15/8,
+                    'Bb': 9/5,
+                    'B': 15/8
                 };
-                return baseFrequency * ratios[note] * Math.pow(2, octave - 4);
+                
+                // Trova il rapporto corretto per la nota
+                let ratio = ratios[note.split('/')[0]];
+                
+                // Calcola la frequenza di C4 (due ottave sotto A4)
+                const C4 = A4 / (4/3) / (5/4);
+                
+                // Calcola la frequenza della nota nell'ottava corretta
+                return C4 * ratio * Math.pow(2, octave - 4);
             }
         }
 
@@ -265,12 +326,11 @@
         function stopTone() {
             if (oscillator) {
                 oscillator.stop();
+                oscillator.disconnect();
                 oscillator = null;
-                playButton.textContent = 'Riproduci Tono';
-                clearInterval(alternatingInterval);
             }
         }
-
+            
         function toggleTone() {
             if (oscillator) {
                 stopTone();
@@ -322,6 +382,80 @@
         populateNoteSelector(naturalNoteSelector, naturalNotes);
         updateFrequency('temperato');
         updateFrequency('naturale');
+
+
+        function createPianoKeyboard() {
+            const keyboardDiv = document.getElementById('piano-keyboard');
+            const octave = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+            
+            for (let i = 0; i < 2; i++) {  // Creiamo due ottave
+                octave.forEach((note, index) => {
+                    const key = document.createElement('div');
+                    key.className = `piano-key ${note.includes('#') ? 'black' : 'white'}`;
+                    key.dataset.note = note;
+                    key.dataset.octave = i + 4;  // Iniziamo dalla quarta ottava
+                    
+                    key.addEventListener('mousedown', () => {
+                        playNote(note, i + 4);
+                        key.classList.add('active');
+                    });
+                    key.addEventListener('mouseup', () => {
+                        stopTone();
+                        key.classList.remove('active');
+                    });
+                    key.addEventListener('mouseleave', () => {
+                        stopTone();
+                        key.classList.remove('active');
+                    });
+                    
+                    keyboardDiv.appendChild(key);
+                });
+            }
+        }     
+
+        function playNote(note, octave) {
+            stopTone(); // Ferma qualsiasi nota precedente
+            
+            const activeSystem = activeSystemSelector.value;
+            const frequency = calculateFrequency(note, parseInt(octave), activeSystem);
+            
+            oscillator = audioContext.createOscillator();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            
+            const gainNode = audioContext.createGain();
+            gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.start();
+            
+            updateUI(note, octave, activeSystem);
+        }
+
+        function updateUI(note, octave, system) {
+            const selector = system === 'temperato' ? temperatedNoteSelector : naturalNoteSelector;
+            const slider = system === 'temperato' ? temperatedFrequencySlider : naturalFrequencySlider;
+            const display = system === 'temperato' ? temperatedFrequencyDisplay : naturalFrequencyDisplay;
+            
+            // Trova l'opzione corrispondente nel selettore
+            let optionToSelect = Array.from(selector.options).find(option => {
+                const [optionNote, optionOctave] = option.value.split(/(\d+)/);
+                return optionNote.includes(note) && optionOctave === octave.toString();
+            });
+
+            if (optionToSelect) {
+                selector.value = optionToSelect.value;
+            }
+
+            const frequency = calculateFrequency(note, octave, system);
+            slider.value = frequency;
+            display.textContent = `Frequenza: ${frequency.toFixed(2)} Hz`;
+        }
+
+        // Chiamata per creare la tastiera
+        createPianoKeyboard();        
     </script>
 </body>
 </html>
