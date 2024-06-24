@@ -6,8 +6,55 @@
     <title>Audio</title>
 </head>
 <body>
-    Text
+
+    <input type="range" id="frequencySlider" min="100" max="1000" value="440">
+    <span id="frequencyValue">440 Hz</span>  
+    <button id="playButton" onclick="togglePlayPause()">Play</button>
+         
     <script>
+        // Creare un'istanza di AudioContext
+        const audioContext = new window.AudioContext();
+        
+        const playButton = document.getElementById("playButton");
+        let oscillator = null;
+
+        // Ottenere il riferimento allo slider e al valore visualizzato
+        const frequencySlider = document.getElementById('frequencySlider');
+        const frequencyValue = document.getElementById('frequencyValue');
+
+        function startOscillator() {
+            oscillator = audioContext.createOscillator();
+            oscillator.type = 'sine'; // Tipo di onda: sine, square, sawtooth, triangle
+            oscillator.frequency.setValueAtTime(frequencySlider.value, audioContext.currentTime); // Imposta la frequenza iniziale
+            oscillator.connect(audioContext.destination);
+            oscillator.start();
+        }
+
+        function stopOscillator() {
+            if (oscillator) {
+                oscillator.stop();
+                oscillator.disconnect();
+                oscillator = null;
+            }
+        }
+
+        frequencySlider.addEventListener('input', function() {
+            const freq = frequencySlider.value;
+            if (oscillator) {
+                oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
+            }
+            frequencyValue.textContent = `${freq} Hz`;
+        });
+
+        function togglePlayPause() {
+            if (oscillator) {
+                stopOscillator();
+                playButton.textContent = "Play";
+            } else {
+                startOscillator();
+                playButton.textContent = "Pause";
+            }
+        }
     </script>
 </body>
 </html>
